@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>Security Monitor</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      background: #050505; color: #33ff33;
+      font-family: 'Share Tech Mono', 'Courier New', monospace;
+      height: 100%; overflow: hidden;
+    }
+
+    .scanlines {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.12) 2px, rgba(0,0,0,0.12) 4px);
+      pointer-events: none; z-index: 1000;
+      animation: scanlineFlicker 0.1s infinite;
+    }
+    @keyframes scanlineFlicker { 0% { opacity: 0.95; } 50% { opacity: 1; } 100% { opacity: 0.95; } }
+
+    .crt-flicker {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.4) 100%);
+      pointer-events: none; z-index: 999;
+    }
+
+    .office-view {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      z-index: 10; transition: opacity 0.4s, transform 0.4s;
+    }
+    .office-view.hidden { opacity: 0; pointer-events: none; transform: translateY(30px); }
+
+    .office-title { font-size: 28px; text-transform: uppercase; letter-spacing: 10px; color: #33ff33; text-shadow: 0 0 20px rgba(51,255,51,0.3); margin-bottom: 12px; }
+    .office-subtitle { font-size: 12px; color: #444; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 40px; }
+    .office-clock { font-size: 48px; color: #33ff33; text-shadow: 0 0 30px rgba(51,255,51,0.2); letter-spacing: 6px; margin-bottom: 60px; }
+    .office-cam-status { font-size: 13px; color: #555; letter-spacing: 2px; margin-bottom: 40px; }
+    .office-cam-status span { color: #33ff33; }
+
+    .pull-up-btn {
+      padding: 16px 48px; font-size: 14px;
+      font-family: 'Share Tech Mono', 'Courier New', monospace;
+      background: #0a1a0a; border: 1px solid #1a3a1a; color: #33ff33;
+      text-transform: uppercase; letter-spacing: 4px; cursor: pointer; transition: all 0.2s;
+    }
+    .pull-up-btn:hover { background: #122212; border-color: #33ff33; box-shadow: 0 0 20px rgba(51,255,51,0.15); }
+    .pull-up-btn .key-hint { display: block; font-size: 10px; color: #333; margin-top: 6px; letter-spacing: 2px; }
+
+    .camera-view {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 50; display: flex; flex-direction: column;
+      opacity: 0; pointer-events: none; transform: translateY(30px);
+      transition: opacity 0.4s, transform 0.4s;
+    }
+    .camera-view.visible { opacity: 1; pointer-events: auto; transform: translateY(0); }
+
+    .header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 20px; border-bottom: 1px solid #1a1a1a;
+      background: rgba(5,5,5,0.95); height: 44px; flex-shrink: 0;
+    }
+    .header-left { display: flex; align-items: center; gap: 16px; }
+    .logo { font-size: 16px; font-weight: bold; text-transform: uppercase; letter-spacing: 6px; color: #33ff33; text-shadow: 0 0 15px rgba(51,255,51,0.4); }
+    .header-status { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #666; }
+    .online-dot { width: 6px; height: 6px; border-radius: 50%; background: #33ff33; box-shadow: 0 0 6px rgba(51,255,51,0.6); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100% { box-shadow: 0 0 6px rgba(51,255,51,0.6); } 50% { box-shadow: 0 0 12px rgba(51,255,51,0.9); } }
+
+    .header-right { display: flex; align-items: center; gap: 16px; }
+    .cam-count { font-size: 11px; color: #888; letter-spacing: 1px; }
+    .cam-count span { color: #33ff33; }
+    .clock { font-size: 12px; color: #33ff33; letter-spacing: 2px; }
+    .close-cam-btn {
+      font-size: 10px; font-family: 'Share Tech Mono', monospace;
+      background: none; border: 1px solid #333; color: #666;
+      padding: 3px 10px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; transition: all 0.2s;
+    }
+    .close-cam-btn:hover { border-color: #ff3333; color: #ff3333; }
+    .share-url {
+      font-size: 10px; color: #555; background: #0a0a0a; border: 1px solid #222;
+      padding: 4px 10px; border-radius: 4px; cursor: pointer; transition: border-color 0.2s;
+      max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .share-url:hover { border-color: #33ff33; color: #33ff33; }
+    .copy-toast {
+      position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px);
+      background: #1a3a1a; border: 1px solid #33ff33; color: #33ff33;
+      padding: 10px 24px; border-radius: 6px; font-family: 'Share Tech Mono', monospace;
+      font-size: 13px; z-index: 2000; opacity: 0; transition: opacity 0.3s, transform 0.3s; pointer-events: none;
+    }
+    .copy-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    .grid { display: grid; gap: 2px; padding: 2px; width: 100%; flex: 1; min-height: 0; }
+    .no-cams-msg { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; text-align: center; padding: 40px; }
+    .no-cams-msg .msg-title { font-size: 16px; color: #555; text-transform: uppercase; letter-spacing: 3px; margin-bottom: 12px; }
+    .no-cams-msg .msg-desc { font-size: 12px; color: #333; max-width: 400px; line-height: 1.8; }
+
+    .cam-feed { position: relative; background: #0a0a0a; overflow: hidden; min-height: 0; }
+    .cam-feed video {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      object-fit: cover; display: block;
+      filter: grayscale(0.85) contrast(1.1) brightness(0.95);
+    }
+    .cam-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; }
+    .cam-top-bar {
+      position: absolute; top: 0; left: 0; right: 0;
+      display: flex; justify-content: flex-end; align-items: flex-start;
+      padding: 8px 12px; background: linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, transparent 100%);
+    }
+    .cam-rec { display: flex; align-items: center; gap: 5px; font-size: 10px; color: #ff3333; }
+    .cam-rec-dot { width: 6px; height: 6px; border-radius: 50%; background: #ff3333; box-shadow: 0 0 4px rgba(255,0,0,0.6); animation: blink 1s infinite; }
+    @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.15; } }
+    .cam-bottom-bar {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      display: flex; justify-content: space-between; align-items: flex-end;
+      padding: 8px 12px; background: linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 100%);
+    }
+    .cam-timestamp { font-size: 10px; color: #777; letter-spacing: 1px; }
+    .cam-quality { font-size: 9px; color: #444; letter-spacing: 1px; }
+    .cam-state { font-size: 9px; color: #33ff33; letter-spacing: 1px; }
+    .noise-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0.04; pointer-events: none; }
+
+    @media (max-width: 500px) {
+      .header { padding: 8px 12px; }
+      .share-url { display: none; }
+      .logo { font-size: 13px; letter-spacing: 4px; }
+      .office-title { font-size: 20px; letter-spacing: 6px; }
+      .office-clock { font-size: 36px; }
+      .pull-up-btn { padding: 14px 32px; font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="scanlines"></div>
+  <div class="crt-flicker"></div>
+
+  <div class="office-view" id="officeView">
+    <div class="office-title">FNAF CAM</div>
+    <div class="office-subtitle">Security Monitoring System</div>
+    <div class="office-clock" id="officeClock">00:00:00</div>
+    <div class="office-cam-status">Cameras Online: <span id="officeCount">0</span></div>
+    <button class="pull-up-btn" id="pullUpBtn" onclick="toggleCameras()">
+      Open Cameras
+      <span class="key-hint">[ SPACE ]</span>
+    </button>
+  </div>
+
+  <div class="camera-view" id="cameraView">
+    <div class="header">
+      <div class="header-left">
+        <div class="logo">FNAF CAM</div>
+        <div class="header-status">
+          <div class="online-dot"></div>
+          <span id="connectionStatus">ONLINE</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="cam-count">CAMS: <span id="camCount">0</span></div>
+        <div class="share-url" id="shareUrl" onclick="copyShareUrl()">Loading...</div>
+        <div class="clock" id="clock">00:00:00</div>
+        <button class="close-cam-btn" onclick="toggleCameras()">CLOSE [SPACE]</button>
+      </div>
+    </div>
+
+    <div id="noCamsMsg" class="no-cams-msg">
+      <div class="msg-title">No cameras connected</div>
+      <div class="msg-desc">Share the camera link with people to see their feeds here.</div>
+    </div>
+
+    <div class="grid" id="cameraGrid" style="display:none;"></div>
+  </div>
+
+  <div class="copy-toast" id="copyToast">Link copied to clipboard</div>
+
+  <script>
+    var WS_URL = location.protocol === 'https:' ? 'wss://' + location.host + '/ws' : 'ws://' + location.host + '/ws';
+    var ws;
+    var myId;
+    var peerConnections = {};
+    var cameraFeeds = {};
+    var camerasOpen = false;
+
+    var iceConfig = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' }
+      ]
+    };
+
+    function log(msg) {
+      console.log('[MONITOR] ' + msg);
+    }
+
+    function updateClock() {
+      var now = new Date();
+      var h = now.getHours().toString().padStart(2, '0');
+      var m = now.getMinutes().toString().padStart(2, '0');
+      var s = now.getSeconds().toString().padStart(2, '0');
+      var timeStr = h + ':' + m + ':' + s;
+      document.getElementById('clock').textContent = timeStr;
+      document.getElementById('officeClock').textContent = timeStr;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    function toggleCameras() {
+      camerasOpen = !camerasOpen;
+      document.getElementById('officeView').classList.toggle('hidden', camerasOpen);
+      document.getElementById('cameraView').classList.toggle('visible', camerasOpen);
+    }
+
+    document.addEventListener('keydown', function(e) {
+      if (e.code === 'Space' && e.target === document.body) {
+        e.preventDefault();
+        toggleCameras();
+      }
+    });
+
+    function getShareUrl() {
+      return location.protocol + '//' + location.host + '/camera';
+    }
+
+    function copyShareUrl() {
+      var url = getShareUrl();
+      navigator.clipboard.writeText(url).then(function() {
+        var toast = document.getElementById('copyToast');
+        toast.classList.add('show');
+        setTimeout(function() { toast.classList.remove('show'); }, 2000);
+      }).catch(function() {
+        prompt('Copy this camera link:', url);
+      });
+    }
+
+    document.getElementById('shareUrl').textContent = getShareUrl();
+
+    function updateGridLayout() {
+      var count = Object.keys(cameraFeeds).length;
+      var grid = document.getElementById('cameraGrid');
+
+      if (count === 0) { grid.style.gridTemplateColumns = '1fr'; grid.style.gridTemplateRows = '1fr'; return; }
+      if (count === 1) { grid.style.gridTemplateColumns = '1fr'; grid.style.gridTemplateRows = '1fr'; }
+      else if (count === 2) { grid.style.gridTemplateColumns = '1fr 1fr'; grid.style.gridTemplateRows = '1fr'; }
+      else if (count <= 4) { grid.style.gridTemplateColumns = '1fr 1fr'; grid.style.gridTemplateRows = '1fr 1fr'; }
+      else if (count <= 6) { grid.style.gridTemplateColumns = '1fr 1fr 1fr'; grid.style.gridTemplateRows = '1fr 1fr'; }
+      else if (count <= 9) { grid.style.gridTemplateColumns = '1fr 1fr 1fr'; grid.style.gridTemplateRows = '1fr 1fr 1fr'; }
+      else if (count <= 12) { grid.style.gridTemplateColumns = '1fr 1fr 1fr 1fr'; grid.style.gridTemplateRows = '1fr 1fr 1fr'; }
+      else { grid.style.gridTemplateColumns = '1fr 1fr 1fr 1fr'; grid.style.gridTemplateRows = '1fr 1fr 1fr 1fr'; }
+    }
+
+    function updateCamCount() {
+      var count = Object.keys(cameraFeeds).length;
+      document.getElementById('camCount').textContent = count;
+      document.getElementById('officeCount').textContent = count;
+      document.getElementById('noCamsMsg').style.display = count === 0 ? 'flex' : 'none';
+      document.getElementById('cameraGrid').style.display = count === 0 ? 'none' : 'grid';
+      updateGridLayout();
+    }
+
+    function getTimestamp() {
+      var now = new Date();
+      var y = now.getFullYear();
+      var mo = (now.getMonth() + 1).toString().padStart(2, '0');
+      var d = now.getDate().toString().padStart(2, '0');
+      var h = now.getHours().toString().padStart(2, '0');
+      var mi = now.getMinutes().toString().padStart(2, '0');
+      var s = now.getSeconds().toString().padStart(2, '0');
+      return y + '-' + mo + '-' + d + ' ' + h + ':' + mi + ':' + s;
+    }
+
+    function createCameraElement(cameraId) {
+      var container = document.createElement('div');
+      container.className = 'cam-feed';
+      container.id = 'cam-' + cameraId;
+
+      var video = document.createElement('video');
+      video.autoplay = true;
+      video.playsInline = true;
+      video.muted = true;
+      video.setAttribute('autoplay', '');
+      video.setAttribute('playsinline', '');
+      video.setAttribute('muted', '');
+
+      var overlay = document.createElement('div');
+      overlay.className = 'cam-overlay';
+
+      var topBar = document.createElement('div');
+      topBar.className = 'cam-top-bar';
+      topBar.innerHTML = '<div class="cam-rec"><div class="cam-rec-dot"></div><span>LIVE</span></div>';
+
+      var bottomBar = document.createElement('div');
+      bottomBar.className = 'cam-bottom-bar';
+      var tsSpan = document.createElement('span');
+      tsSpan.className = 'cam-timestamp';
+      tsSpan.textContent = getTimestamp();
+      var qualSpan = document.createElement('span');
+      qualSpan.className = 'cam-quality';
+      qualSpan.textContent = '720P';
+      var stateSpan = document.createElement('span');
+      stateSpan.className = 'cam-state';
+      stateSpan.id = 'state-' + cameraId;
+      stateSpan.textContent = 'CONNECTING';
+      bottomBar.appendChild(tsSpan);
+      bottomBar.appendChild(stateSpan);
+      bottomBar.appendChild(qualSpan);
+
+      setInterval(function() { tsSpan.textContent = getTimestamp(); }, 1000);
+
+      var noiseCanvas = document.createElement('canvas');
+      noiseCanvas.className = 'noise-canvas';
+
+      overlay.appendChild(topBar);
+      overlay.appendChild(bottomBar);
+      container.appendChild(video);
+      container.appendChild(noiseCanvas);
+      container.appendChild(overlay);
+
+      document.getElementById('cameraGrid').appendChild(container);
+
+      drawNoise(noiseCanvas);
+
+      return { container: container, video: video, stateSpan: stateSpan };
+    }
+
+    function drawNoise(canvas) {
+      var ctx = canvas.getContext('2d');
+      function render() {
+        var w = canvas.width = canvas.offsetWidth || 200;
+        var h = canvas.height = canvas.offsetHeight || 150;
+        var imageData = ctx.createImageData(w, h);
+        for (var i = 0; i < imageData.data.length; i += 4) {
+          var v = Math.random() * 255;
+          imageData.data[i] = v;
+          imageData.data[i + 1] = v;
+          imageData.data[i + 2] = v;
+          imageData.data[i + 3] = 255;
+        }
+        ctx.putImageData(imageData, 0, 0);
+        requestAnimationFrame(render);
+      }
+      render();
+    }
+
+    function removeCameraElement(cameraId) {
+      var el = document.getElementById('cam-' + cameraId);
+      if (el) el.remove();
+      delete cameraFeeds[cameraId];
+      if (peerConnections[cameraId]) {
+        peerConnections[cameraId].close();
+        delete peerConnections[cameraId];
+      }
+      updateCamCount();
+    }
+
+    function connectWebSocket() {
+      log('Connecting to ' + WS_URL);
+      ws = new WebSocket(WS_URL);
+
+      ws.onopen = function() {
+        log('WebSocket connected, registering as monitor');
+        document.getElementById('connectionStatus').textContent = 'ONLINE';
+        ws.send(JSON.stringify({ type: 'register', role: 'monitor' }));
+      };
+
+      ws.onmessage = async function(event) {
+        var msg = JSON.parse(event.data);
+        log('Received: ' + msg.type + (msg.fromId ? ' from ' + msg.fromId : ''));
+
+        switch (msg.type) {
+          case 'registered':
+            myId = msg.id;
+            log('Registered as monitor ' + myId);
+            break;
+
+          case 'offer':
+            log('Handling offer from camera ' + msg.fromId);
+            await handleOffer(msg);
+            break;
+
+          case 'ice-candidate':
+            await handleIceCandidate(msg);
+            break;
+
+          case 'camera-disconnected':
+            log('Camera disconnected: ' + msg.cameraId);
+            removeCameraElement(msg.cameraId);
+            break;
+        }
+      };
+
+      ws.onclose = function() {
+        log('WebSocket closed, reconnecting in 3s');
+        document.getElementById('connectionStatus').textContent = 'OFFLINE';
+        Object.keys(peerConnections).forEach(function(id) {
+          peerConnections[id].close();
+        });
+        peerConnections = {};
+        cameraFeeds = {};
+        document.getElementById('cameraGrid').innerHTML = '';
+        updateCamCount();
+        setTimeout(connectWebSocket, 3000);
+      };
+
+      ws.onerror = function(e) {
+        log('WebSocket error');
+      };
+    }
+
+    async function handleOffer(msg) {
+      try {
+        var pc = new RTCPeerConnection(iceConfig);
+        peerConnections[msg.fromId] = pc;
+
+        var camEl = createCameraElement(msg.fromId);
+        var video = camEl.video;
+        var stateSpan = camEl.stateSpan;
+        cameraFeeds[msg.fromId] = {};
+        updateCamCount();
+
+        pc.ontrack = function(event) {
+          log('Got track from ' + msg.fromId + ', streams: ' + event.streams.length);
+          if (event.streams && event.streams[0]) {
+            video.srcObject = event.streams[0];
+            video.play().catch(function(e) { log('Video play error: ' + e.message); });
+          }
+        };
+
+        pc.onicecandidate = function(event) {
+          if (event.candidate && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+              type: 'ice-candidate',
+              candidate: event.candidate,
+              targetId: msg.fromId,
+              fromId: myId
+            }));
+          }
+        };
+
+        pc.oniceconnectionstatechange = function() {
+          log('ICE state for ' + msg.fromId + ' -> ' + pc.iceConnectionState);
+          if (stateSpan) stateSpan.textContent = pc.iceConnectionState.toUpperCase();
+        };
+
+        pc.onconnectionstatechange = function() {
+          log('Connection state for ' + msg.fromId + ' -> ' + pc.connectionState);
+          if (pc.connectionState === 'connected' && stateSpan) {
+            stateSpan.textContent = 'LIVE';
+          }
+          if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+            removeCameraElement(msg.fromId);
+          }
+        };
+
+        await pc.setRemoteDescription(new RTCSessionDescription(msg.offer));
+        log('Set remote description for ' + msg.fromId);
+
+        var answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        log('Created and set local answer for ' + msg.fromId);
+
+        ws.send(JSON.stringify({
+          type: 'answer',
+          answer: answer,
+          targetId: msg.fromId,
+          fromId: myId
+        }));
+        log('Sent answer to camera ' + msg.fromId);
+      } catch (err) {
+        log('Error in handleOffer: ' + err.message);
+      }
+    }
+
+    async function handleIceCandidate(msg) {
+      try {
+        var pc = peerConnections[msg.fromId];
+        if (pc) {
+          await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+        }
+      } catch (err) {
+        log('Error adding ICE candidate: ' + err.message);
+      }
+    }
+
+    connectWebSocket();
+  </script>
+</body>
+</html>

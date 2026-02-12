@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>FNAF CAM - Security System</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Share Tech Mono', 'Courier New', monospace;
+      background: #050505;
+      color: #33ff33;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .scanlines {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.12) 2px, rgba(0,0,0,0.12) 4px);
+      pointer-events: none;
+      z-index: 1000;
+    }
+    .crt {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.5) 100%);
+      pointer-events: none;
+      z-index: 999;
+    }
+    .wrapper {
+      max-width: 500px;
+      text-align: center;
+      padding: 40px 24px;
+      position: relative;
+      z-index: 1;
+    }
+    h1 {
+      font-size: 36px;
+      letter-spacing: 8px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+      text-shadow: 0 0 20px rgba(51,255,51,0.4), 0 0 40px rgba(51,255,51,0.2);
+    }
+    .subtitle {
+      font-size: 12px;
+      color: #555;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      margin-bottom: 48px;
+    }
+    .cards {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    a {
+      display: block;
+      padding: 28px 24px;
+      border: 1px solid #1a1a1a;
+      border-radius: 6px;
+      background: #0a0a0a;
+      text-decoration: none;
+      color: #33ff33;
+      transition: all 0.25s;
+      text-align: left;
+    }
+    a:hover {
+      border-color: #33ff33;
+      background: #0f1a0f;
+      box-shadow: 0 0 20px rgba(51,255,51,0.1);
+    }
+    .card-icon {
+      font-size: 28px;
+      margin-bottom: 12px;
+    }
+    .card-title {
+      font-size: 18px;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      margin-bottom: 8px;
+    }
+    .card-desc {
+      font-size: 12px;
+      color: #555;
+      line-height: 1.6;
+    }
+    .monitor-card:hover { border-color: #ff3333; }
+    .monitor-card:hover .card-title { color: #ff3333; }
+    .divider {
+      font-size: 11px;
+      color: #333;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      padding: 8px 0;
+    }
+    @media (min-width: 600px) {
+      .cards {
+        flex-direction: row;
+        gap: 20px;
+      }
+      a { flex: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="scanlines"></div>
+  <div class="crt"></div>
+  <div class="wrapper">
+    <h1>FNAF CAM</h1>
+    <p class="subtitle">Security Camera System</p>
+    <div class="cards">
+      <a href="/monitor" class="monitor-card">
+        <div class="card-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ff3333" stroke-width="1.5">
+            <rect x="2" y="3" width="20" height="14" rx="2"/>
+            <path d="M8 21h8M12 17v4"/>
+            <circle cx="12" cy="10" r="2"/>
+          </svg>
+        </div>
+        <div class="card-title">Monitor</div>
+        <div class="card-desc">View all camera feeds in a security grid. You are the night guard.</div>
+      </a>
+      <div class="divider">OR</div>
+      <a href="/camera">
+        <div class="card-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#33ff33" stroke-width="1.5">
+            <path d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z"/>
+          </svg>
+        </div>
+        <div class="card-title">Camera</div>
+        <div class="card-desc">Share your webcam as a security camera feed for the monitor to watch.</div>
+      </a>
+    </div>
+  </div>
+</body>
+</html>

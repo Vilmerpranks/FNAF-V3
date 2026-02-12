@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>Camera Feed</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0a0a0a; color: #33ff33;
+      font-family: 'Courier New', monospace;
+      min-height: 100vh; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; overflow: hidden;
+    }
+    .scanlines {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 4px);
+      pointer-events: none; z-index: 1000;
+    }
+    .container { text-align: center; padding: 20px; position: relative; z-index: 1; }
+    h1 { font-size: 18px; text-transform: uppercase; letter-spacing: 4px; margin-bottom: 8px; color: #33ff33; text-shadow: 0 0 10px rgba(51,255,51,0.5); }
+    .status { font-size: 14px; margin-bottom: 20px; color: #888; }
+    .status.connected { color: #33ff33; }
+    .status.error { color: #ff3333; }
+    .video-wrapper {
+      position: relative; width: 90vw; max-width: 500px; aspect-ratio: 16/9;
+      background: #111; border: 2px solid #222; border-radius: 4px; overflow: hidden; margin: 0 auto;
+    }
+    video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+    .rec-indicator { position: absolute; top: 12px; right: 12px; display: flex; align-items: center; gap: 6px; font-size: 12px; color: #ff3333; text-shadow: 0 0 6px rgba(255,0,0,0.5); }
+    .rec-dot { width: 8px; height: 8px; border-radius: 50%; background: #ff3333; animation: blink 1s infinite; }
+    @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.2; } }
+    .hidden { display: none; }
+    .info { margin-top: 16px; font-size: 12px; color: #555; max-width: 400px; }
+    .start-btn {
+      margin-top: 20px; padding: 12px 32px; font-size: 16px;
+      background: #1a3a1a; border: 1px solid #33ff33; color: #33ff33;
+      font-family: 'Courier New', monospace; border-radius: 4px;
+      cursor: pointer; text-transform: uppercase; letter-spacing: 1px;
+    }
+    .start-btn:hover { background: #2a4a2a; }
+    .debug { margin-top: 12px; font-size: 10px; color: #333; max-width: 400px; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <div class="scanlines"></div>
+  <div class="container">
+    <div id="setup">
+      <h1>Security Camera</h1>
+      <p class="info">Press start to share your webcam feed with the monitor.</p>
+      <button class="start-btn" onclick="startCamera()">Start Feed</button>
+    </div>
+
+    <div id="streaming" class="hidden">
+      <h1>Camera Active</h1>
+      <p class="status" id="status">Connecting...</p>
+      <div class="video-wrapper">
+        <video id="localVideo" autoplay muted playsinline></video>
+        <div class="rec-indicator" id="recIndicator" style="display:none">
+          <div class="rec-dot"></div>
+          <span>REC</span>
+        </div>
+      </div>
+      <p class="info">Keep this page open. The monitor can see your feed.</p>
+      <p class="debug" id="debug"></p>
+    </div>
+  </div>
+
+  <script>
+    const WS_URL = location.protocol === 'https:' ? 'wss://' + location.host + '/ws' : 'ws://' + location.host + '/ws';
+    let ws;
+    let localStream;
+    let peerConnections = {};
+    let cameraName = 'CAM-' + Math.floor(Math.random() * 999).toString().padStart(3, '0');
+    let myId;
+
+    const iceConfig = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' }
+      ]
+    };
+
+    function log(msg) {
+      console.log('[CAMERA] ' + msg);
+      var d = document.getElementById('debug');
+      if (d) d.textContent = msg;
+    }
+
+    async function startCamera() {
+      var constraints = [
+        { video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+        { video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: false },
+        { video: true, audio: false }
+      ];
+
+      for (var i = 0; i < constraints.length; i++) {
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia(constraints[i]);
+          log('Camera opened with constraint #' + i);
+          break;
+        } catch (err) {
+          log('Constraint #' + i + ' failed: ' + err.message);
+        }
+      }
+
+      if (!localStream) {
+        alert('Could not access camera. Please allow camera permissions.');
+        return;
+      }
+
+      var tracks = localStream.getVideoTracks();
+      if (tracks.length > 0) {
+        var settings = tracks[0].getSettings();
+        log('Camera resolution: ' + settings.width + 'x' + settings.height);
+      }
+
+      document.getElementById('setup').classList.add('hidden');
+      document.getElementById('streaming').classList.remove('hidden');
+      document.getElementById('localVideo').srcObject = localStream;
+
+      connectWebSocket();
+    }
+
+    function connectWebSocket() {
+      log('Connecting to ' + WS_URL);
+      ws = new WebSocket(WS_URL);
+
+      ws.onopen = function() {
+        log('WebSocket connected, registering as camera');
+        setStatus('Connected to server', 'connected');
+        ws.send(JSON.stringify({ type: 'register', role: 'camera', name: cameraName }));
+        document.getElementById('recIndicator').style.display = 'flex';
+      };
+
+      ws.onmessage = async function(event) {
+        var msg = JSON.parse(event.data);
+        log('Received: ' + msg.type);
+
+        switch (msg.type) {
+          case 'registered':
+            myId = msg.id;
+            setStatus('Streaming - ' + cameraName, 'connected');
+            log('Registered as ' + myId);
+            break;
+
+          case 'request-offer':
+            log('Creating offer for monitor ' + msg.monitorId);
+            await createOffer(msg.monitorId);
+            break;
+
+          case 'answer':
+            log('Received answer from ' + msg.fromId);
+            await handleAnswer(msg);
+            break;
+
+          case 'ice-candidate':
+            await handleIceCandidate(msg);
+            break;
+
+          case 'monitor-disconnected':
+            log('Monitor disconnected: ' + msg.monitorId);
+            if (peerConnections[msg.monitorId]) {
+              peerConnections[msg.monitorId].close();
+              delete peerConnections[msg.monitorId];
+            }
+            break;
+        }
+      };
+
+      ws.onclose = function() {
+        setStatus('Disconnected. Reconnecting...', 'error');
+        log('WebSocket closed, reconnecting in 3s');
+        document.getElementById('recIndicator').style.display = 'none';
+        Object.values(peerConnections).forEach(function(pc) { pc.close(); });
+        peerConnections = {};
+        setTimeout(connectWebSocket, 3000);
+      };
+
+      ws.onerror = function() {
+        log('WebSocket error');
+        setStatus('Connection error', 'error');
+      };
+    }
+
+    async function createOffer(monitorId) {
+      try {
+        var pc = new RTCPeerConnection(iceConfig);
+        peerConnections[monitorId] = pc;
+
+        localStream.getTracks().forEach(function(track) {
+          pc.addTrack(track, localStream);
+        });
+
+        pc.onicecandidate = function(event) {
+          if (event.candidate && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+              type: 'ice-candidate',
+              candidate: event.candidate,
+              targetId: monitorId,
+              fromId: myId
+            }));
+          }
+        };
+
+        pc.oniceconnectionstatechange = function() {
+          log('ICE state -> ' + pc.iceConnectionState);
+        };
+
+        pc.onconnectionstatechange = function() {
+          log('Connection state -> ' + pc.connectionState);
+          if (pc.connectionState === 'connected') {
+            setStatus('Live - ' + cameraName, 'connected');
+          }
+          if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+            pc.close();
+            delete peerConnections[monitorId];
+          }
+        };
+
+        var offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        log('Sending offer to monitor ' + monitorId);
+        ws.send(JSON.stringify({
+          type: 'offer',
+          offer: offer,
+          targetId: monitorId,
+          fromId: myId,
+          cameraName: cameraName
+        }));
+      } catch (err) {
+        log('Error creating offer: ' + err.message);
+      }
+    }
+
+    async function handleAnswer(msg) {
+      try {
+        var pc = peerConnections[msg.fromId];
+        if (pc) {
+          await pc.setRemoteDescription(new RTCSessionDescription(msg.answer));
+          log('Remote description set for ' + msg.fromId);
+        } else {
+          log('No peer connection for answer from ' + msg.fromId);
+        }
+      } catch (err) {
+        log('Error handling answer: ' + err.message);
+      }
+    }
+
+    async function handleIceCandidate(msg) {
+      try {
+        var pc = peerConnections[msg.fromId];
+        if (pc) {
+          await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+        }
+      } catch (err) {
+        log('Error adding ICE candidate: ' + err.message);
+      }
+    }
+
+    function setStatus(text, cls) {
+      var el = document.getElementById('status');
+      el.textContent = text;
+      el.className = 'status ' + (cls || '');
+    }
+  </script>
+</body>
+</html>
